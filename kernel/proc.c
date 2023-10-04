@@ -125,6 +125,7 @@ found:
   p->pid = allocpid();
   p->state = USED;
 
+  p->trace_mask=0;
   // Allocate a trapframe page.
   if((p->trapframe = (struct trapframe *)kalloc()) == 0){
     freeproc(p);
@@ -311,6 +312,7 @@ fork(void)
   safestrcpy(np->name, p->name, sizeof(p->name));
 
   pid = np->pid;
+  np->trace_mask=p->trace_mask;
 
   release(&np->lock);
 
@@ -684,5 +686,14 @@ procdump(void)
       state = "???";
     printf("%d %s %s", p->pid, state, p->name);
     printf("\n");
-  }
+  }  
+}
+uint64 count_proc(){
+   struct proc *p;
+   uint64 cnt=0;
+     for(p = proc; p < &proc[NPROC]; p++){
+    if(p->state != UNUSED)
+      cnt++;
+     }
+     return cnt;
 }
