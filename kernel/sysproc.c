@@ -18,7 +18,8 @@ sys_exit(void)
 uint64
 sys_getpid(void)
 {
-  return myproc()->pid;
+  return myproc()->sharedpage->pid;
+  // return myproc()->pid;
 }
 
 uint64
@@ -70,14 +71,50 @@ sys_sleep(void)
 }
 
 
-#ifdef LAB_PGTBL
+// #ifdef LAB_PGTBL
 int
 sys_pgaccess(void)
 {
   // lab pgtbl: your code here.
+
+  uint64 va;
+  int pnum;
+  uint64 abits_addr;
+  argaddr(0,&va);
+  argint(1, &pnum);
+  argaddr(2,&abits_addr);
+  
+
+  struct proc *p=myproc();
+
+  pagetable_t pagetable=p->pagetable;
+  
+  uint64  res=0;
+  
+  if (pnum>=64){
+    pnum=63;
+  }
+  pte_t *pte;
+  printf("dddddddsad\n");
+  for(int i=0;i<pnum;i++){
+    if (va>MAXVA){
+      return -1;
+    }
+    pte=walk(pagetable,va,0);
+    if(*pte&PTE_A){
+      res|=1<<i;
+      *pte&=(~PTE_A);
+    }
+    va+=PGSIZE;
+  }
+
+  if(copyout(p->pagetable,abits_addr,(char *)&res,sizeof(res))!=0){
+    return -1;
+  }
+
   return 0;
 }
-#endif
+// #endif
 
 uint64
 sys_kill(void)
