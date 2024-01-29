@@ -95,7 +95,6 @@ sys_pgaccess(void)
     pnum=63;
   }
   pte_t *pte;
-  printf("dddddddsad\n");
   for(int i=0;i<pnum;i++){
     if (va>MAXVA){
       return -1;
