@@ -77,8 +77,17 @@ usertrap(void)
     exit(-1);
 
   // give up the CPU if this is a timer interrupt.
-  if(which_dev == 2)
+  if(which_dev == 2){
+    if(p->alarm_interval&&p->returned){
+      p->pass_ticks++;
+      if(p->pass_ticks%p->alarm_interval){
+        p->saved_trapframe=*p->trapframe;
+        p->trapframe->epc=p->alarm_handler_va;
+        p->returned=0;
+      }
+    }
     yield();
+  }
 
   usertrapret();
 }
@@ -126,6 +135,8 @@ usertrapret(void)
   // switches to the user page table, restores user registers,
   // and switches to user mode with sret.
   uint64 trampoline_userret = TRAMPOLINE + (userret - trampoline);
+
+
   ((void (*)(uint64))trampoline_userret)(satp);
 }
 
