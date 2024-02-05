@@ -65,6 +65,16 @@ usertrap(void)
     intr_on();
 
     syscall();
+  }else if(r_scause()==15){
+
+    uint64 va =r_stval();
+    // printf("Write Access Fault:%p\n",va);
+
+
+    if(uvmcow(p->pagetable,va)==-1){
+      setkilled(p);
+    }
+
   } else if((which_dev = devintr()) != 0){
     // ok
   } else {
