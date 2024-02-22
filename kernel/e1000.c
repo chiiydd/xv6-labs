@@ -7,6 +7,7 @@
 #include "defs.h"
 #include "e1000_dev.h"
 #include "net.h"
+#include <stddef.h>
 
 #define TX_RING_SIZE 16
 static struct tx_desc tx_ring[TX_RING_SIZE] __attribute__((aligned(16)));
@@ -103,7 +104,41 @@ e1000_transmit(struct mbuf *m)
   // a pointer so that it can be freed after sending.
   //
   
+  acquire(&e1000_lock);
+  uint tx_index=regs[E1000_TDT];
+  struct tx_desc * desc=&tx_ring[tx_index];
+  // 没有设置DD标志位即说明当前数据包还未完成，需要返回错误
+  if((desc->status&E1000_TXD_STAT_DD)==0){
+    goto error_case;
+  }
+
+  // 如果发送队列的尾部 tail指向的缓冲区不为空
+  //  我们需要先释放该缓冲区
+  if(tx_mbufs[tx_index]!=NULL){
+
+    mbuffree(tx_mbufs[tx_index]);
+    tx_mbufs[tx_index]=NULL;
+  }
+  
+  //发送的数据设置为 要传输的数据包的首地址以及长度
+  desc->addr=(uint64)m->head;
+  desc->length=m->len;
+  //设置 command的EOP和RS位
+  // EOP:End of Packet 表明这个描述符是数据包的结尾
+  // RS:report status ,表明该描述符指向的数据发送完成后会设置描述符的E1000_TXD_STAT_DD标志位
+  desc->cmd= E1000_TXD_CMD_EOP |E1000_TXD_CMD_RS;
+
+
+  //将发送的数据放入缓冲区后，环形队列的尾部+1
+  tx_mbufs[tx_index]=m;
+  regs[E1000_TDT]=(tx_index+1)%TX_RING_SIZE;
+
+  release(&e1000_lock);
   return 0;
+  
+error_case:
+  release(&e1000_lock);
+  return -1;
 }
 
 static void
@@ -114,7 +149,34 @@ e1000_recv(void)
   //
   // Check for packets that have arrived from the e1000
   // Create and deliver an mbuf for each packet (using net_rx()).
-  //
+  uint index;
+  struct rx_desc * desc;
+
+//一次中断应该把接收队列中的数据都读取出来，应该是循环
+  while(1){
+    //获取接收环形队列的尾部tail+1的索引
+    // tail+1对应的数据包是第一个完成接收的数据包
+    index=(regs[E1000_RDT]+1)%RX_RING_SIZE;
+
+    desc = &rx_ring[index];
+    //如果该描述符还未设置DD标志，说明网卡还没有接收完成该数据包
+    //  说明已经把所有接收完成的数据包接收了，结束循环
+    if((desc->status&E1000_RXD_STAT_DD)==0){
+      return;
+    }
+
+
+    rx_mbufs[index]->len=desc->length;
+    net_rx(rx_mbufs[index]);
+
+    rx_mbufs[index]=mbufalloc(0);
+    desc->addr=(uint64)rx_mbufs[index]->head;
+    desc->status=0;
+    regs[E1000_RDT]=index;
+  }
+
+
+
 }
 
 void
